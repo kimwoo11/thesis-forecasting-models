@@ -1,0 +1,27 @@
+'CASE_UPC_CD': Product ID
+'WeekNumber': Ordinal Week Number
+'YearMonth': Year Month Description
+'Year': Year Number
+'MIN_WeekNumber': First Shipping Week
+'MAX_WeekNumber': Last Shipping Week
+'ShipmentNSV': Dollar Amount Shipeed
+'ShipmentUnits': Units Amount Shipped
+'ShipmentCases': Case Amount Shipped
+'ExplodedShipmentCases': Cases Calculated from other mixed pack
+'ExplodedShipmentNSV': Dollar Calculated from other mixed pack
+'ExplodedShipmentUnits': Units Calculated from other mixed pack
+'ShipmentPricePerUnit': Dollar Per Case 
+'FinalCustomerExpectedOrderQty': Ordered Cases
+'DispatchedQty': Shipped Cases
+'ChangeLossesQty': Ordered Cases - Shipped Cases
+'POSSales': Point of Sales Dollars
+'POSUnits': Point of Sales Units
+'POSCases': Point of Sales Units / UnitsPerCase
+'QtyOnHand': Units in Inventory
+'POSPricePerUnit': POS Price, if not avaialble, replaced by AVG Price
+'FeaturePrice': Internal Event Price (Need Clarification)
+'PGDesc': Promotion Group
+'BrandDesc': Brand
+'CategoryDesc': Category
+'DivisionDesc': Division
+'UnitsPerCase': Number of Units Per Case

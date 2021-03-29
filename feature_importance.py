@@ -1,10 +1,11 @@
+from data_loader import CaseUpc, Category
+from data_util import load_dataset
+from config import *
+from sklearn.preprocessing import MinMaxScaler
+
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.feature_selection as fs
-
-from config import *
-from sklearn.preprocessing import MinMaxScaler
-from data_util import load_npz
 
 
 def plot_mi_scores(dataset, n, fig_name, dataset_name):
@@ -53,10 +54,14 @@ def plot_average_mi_scores(all_scores, name):
 
 
 if __name__ == "__main__":
-    case_upc_dataset, _, category_dataset, _ = load_npz('data/unilever_datasets.npz')
+    df = load_dataset("data/UnileverShipmentPOS.csv")
+    n_in = 20
+    n_out = 12
+    case_upc_dataset = CaseUpc(n_in, n_out, FEATURES, TARGETS)
+    category_dataset = Category(n_in, n_out, FEATURES, TARGETS)
 
-    case_all_scores = plot_mi_scores(case_upc_dataset, 5, "MI Scores of 25 Case UPCs", "Case_UPC")
-    category_all_scores = plot_mi_scores(category_dataset, 4, "MI Scores of 16 Categories", "Categories")
+    case_all_scores = plot_mi_scores(case_upc_dataset.upc_to_ts, 5, "MI Scores of 25 Case UPCs", "Case_UPC")
+    category_all_scores = plot_mi_scores(category_dataset.category_to_ts, 4, "MI Scores of 16 Categories", "Categories")
     plot_average_mi_scores(case_all_scores, "Case_UPC")
     plot_average_mi_scores(category_all_scores, "Categories")
 

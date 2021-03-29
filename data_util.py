@@ -8,50 +8,11 @@ from datetime import datetime
 
 
 class Data:
-    def __init__(self, X=None, y=None, agg=None, name=None):
+    def __init__(self, X=None, y=None, agg=None, scaler=None):
         self.X = X
         self.y = y
         self.agg = agg
-        self.name = name
-
-
-def create_datasets(n_in, n_out, features, targets, filename):
-    df = load_dataset('data/UnileverShipmentPOS.csv')
-
-    cases = df.CASE_UPC_CD.unique()
-    categories = df.CategoryDesc.unique()
-
-    case_upc_dataset = defaultdict(Data)
-    category_dataset = defaultdict(Data)
-
-    for case in cases:
-        ds = df[df.CASE_UPC_CD == case][features].dropna()
-        if ds.shape[0] > 50:
-            X, y, agg = series_preparation(ds, targets, n_in, n_out)
-            case_upc_dataset[case].X = X
-            case_upc_dataset[case].y = y
-            case_upc_dataset[case].agg = agg
-
-    for cat in categories:
-        ds = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
-        if ds.shape[0] > 50:
-            X, y, agg = series_preparation(ds, targets, n_in, n_out)
-            category_dataset[cat].X = X
-            category_dataset[cat].y = y
-            category_dataset[cat].agg = agg
-
-    # create concatenated datasets
-    case_upc_dataset_concat, category_dataset_concat = concatenate_datasets(case_upc_dataset, category_dataset)
-
-    np.savez('data/{}'.format(filename), case_upc_dataset=case_upc_dataset,
-             case_upc_dataset_concat=case_upc_dataset_concat, category_dataset=category_dataset,
-             category_dataset_concat=category_dataset_concat)
-
-
-def load_npz(path_to_npz):
-    datasets = np.load(path_to_npz, allow_pickle=True)
-    return datasets['case_upc_dataset'].item(), datasets['case_upc_dataset_concat'].item(), \
-        datasets['category_dataset'].item(), datasets['category_dataset_concat'].item()
+        self.scaler = scaler
 
 
 def load_dataset(path_to_dataset):
@@ -68,13 +29,14 @@ def series_preparation(df, targets, n_in=1, n_out=1, dropnan=True, normalize=Tru
         n_in: Number of lagged timesteps that the model takes in
         n_out: Prediction horizion; number of time steps model predicts
         dropnan: If True, drops NaN values
-        normalize: If True, normalizes data across featuress
+        normalize: If True, normalizes data across features
     Returns:
         X: numpy array of size (num_samples, n_in, num_features)
         y: numpy array of size (num_samples, n_out, num_targets)
         agg: aggregated X and y.
             df of size (num_samples, n_in*num_features+n_out*num_targets)
     """
+    scaler = None
     if normalize:
         values = df.values
         # normalize features
@@ -120,7 +82,7 @@ def series_preparation(df, targets, n_in=1, n_out=1, dropnan=True, normalize=Tru
     X = np.reshape(np.ravel(X.values), (num_samples, n_in, num_feats))
     y = np.reshape(np.ravel(y.values), (num_samples, n_out, num_targets))
 
-    return X, y, agg
+    return X, y, agg, scaler
 
 
 def format_unilever_data(df):
@@ -146,56 +108,6 @@ def format_unilever_data(df):
     return df
 
 
-def concatenate_datasets(case_upc_dataset, category_dataset):
-    """Concatenates two datasets and returns a returns two dictionaries
-    Args:
-        case_upc_dataset: a dictionary with case_upc as key, and a Data object as value
-        category_dataset: a dictionary with category name as key, and a Data object as value
-    """
-    case_upc_concat = Data()
-    category_concat = Data()
-
-    for case in case_upc_dataset.keys():
-        X = case_upc_dataset[case].X
-
-        if case_upc_concat.X is None:
-            case_upc_concat.X = X
-        else:
-            case_upc_concat.X = np.concatenate((case_upc_concat.X, X), axis=0)
-
-        y = case_upc_dataset[case].y
-        if case_upc_concat.y is None:
-            case_upc_concat.y = y
-        else:
-            case_upc_concat.y = np.concatenate((case_upc_concat.y, y), axis=0)
-
-        agg = case_upc_dataset[case].agg
-        if case_upc_concat.agg is None:
-            case_upc_concat.agg = agg
-        else:
-            case_upc_concat.agg = case_upc_concat.agg.append(agg, ignore_index=True)
-
-    for cat in category_dataset.keys():
-        X = category_dataset[cat].X
-        if category_concat.X is None:
-            category_concat.X = X
-        else:
-            category_concat.X = np.concatenate((category_concat.X, X), axis=0)
-
-        y = category_dataset[cat].y
-        if category_concat.y is None:
-            category_concat.y = y
-        else:
-            category_concat.y = np.concatenate((category_concat.y, y), axis=0)
-
-        agg = category_dataset[cat].agg
-        if category_concat.agg is None:
-            category_concat.agg = agg
-        else:
-            category_concat.agg = category_concat.agg.append(agg, ignore_index=True)
-    return case_upc_concat, category_concat
-
-
 def train_test_split(X, y, test_frac):
     """Creates train/test split
     Args:
@@ -212,3 +124,15 @@ def train_test_split(X, y, test_frac):
     y_train = y[split:]
 
     return X_train, y_train, X_test, y_test
+
+
+def normalize_df(df):
+    values = df.values
+    # normalize features
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled = scaler.fit_transform(values)
+    # created normalized dataframe
+    scaled_df = pd.DataFrame(scaled)
+    scaled_df.index = df.index
+    scaled_df.columns = df.columns
+    return scaled_df

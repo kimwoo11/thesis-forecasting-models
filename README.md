@@ -16,7 +16,7 @@ Completed models:
 Models under consideration:
 
 1. Attention is All You Need (Univariate Model)
-2. Self Attention LSTM 
+2. Self Attention LSTM (under review)
 3. Temporal Pattern Attention LSTM (TPA-LSTM)
 
 ## Data

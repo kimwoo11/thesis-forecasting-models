@@ -115,6 +115,7 @@ if __name__ == "__main__":
         ax.yaxis.set_ticks_position('none')
         ax.spines["top"].set_alpha(0)
         ax.tick_params(labelsize=6)
+        ax.grid(True)
 
     plt.suptitle("Lowest Error Prediction for Case UPC {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
@@ -151,6 +152,7 @@ if __name__ == "__main__":
         ax.yaxis.set_ticks_position('none')
         ax.spines["top"].set_alpha(0)
         ax.tick_params(labelsize=6)
+        ax.grid(True)
 
     plt.suptitle("Lowest Error Prediction For Category {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]

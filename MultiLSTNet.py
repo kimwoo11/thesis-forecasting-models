@@ -21,7 +21,7 @@ class MultiLSTNet(nn.Module):
         self.conv1 = nn.Conv2d(1, self.cnn_hid_size, kernel_size=(self.kernel_size, self.num_features))
         self.LSTM1 = nn.LSTM(self.cnn_hid_size, self.rnn_hid_size)
         self.dropout = nn.Dropout(p=args.dropout)
-        self.LSTM2 = nn.LSTM(self.rnn_hid_size, self.num_features)
+        self.LSTM2 = nn.LSTM(self.rnn_hid_size, self.num_targets)
 
         if self.highway_size > 0:
             self.highway = nn.Linear(self.highway_size, self.output_size)
@@ -42,7 +42,7 @@ class MultiLSTNet(nn.Module):
 
         # lstm encoder
         r = c.permute(2, 0, 1).contiguous()
-        _, (r,_) = self.LSTM1(r)
+        _, (r, _) = self.LSTM1(r)
         r = self.dropout(r)
         r = r.repeat(self.output_size, 1, 1)
 
@@ -55,7 +55,7 @@ class MultiLSTNet(nn.Module):
             z = x[:, -self.highway_size:, :]
             z = z.permute(0, 2, 1).contiguous().view(-1, self.highway_size)
             z = self.highway(z)
-            z = z.view(-1, self.output_size, self.num_features)
+            z = z.view(-1, self.output_size, self.num_targets)
             res = res + z
 
         if self.output:
@@ -81,7 +81,7 @@ def load_data(data_class, device, path_to_data, input_size, output_size, feature
     return train_loader, val_loader, test_loader
 
 
-def train_lstnet(args, features, targets, data_class, path_to_data, name="LSTNet", grid_search=False):
+def train_multi_lstnet(args, features, targets, data_class, path_to_data, name="MultiLSTNet", grid_search=False):
     print(name)
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
@@ -204,7 +204,7 @@ def plot_multi_step(model, X, y, name, targets, forecast_steps=1):
         ax[i].set_title("{} Forecast vs Target".format(targets[i]))
         ax[i].grid(True)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig.savefig("figures/{}_{}_step_plot.png".format(name, forecast_steps))
+    fig.savefig("figures/{}_{}_step.png".format(name, forecast_steps))
 
 
 def best_multi_step(model, ts, keys):
@@ -241,7 +241,7 @@ def best_multi_step(model, ts, keys):
 
 def main(args, features, targets, data_class, path_to_data, name="MultiLSTNet"):
     args = AttrDict(args)
-    _, _, test_loader = train_lstnet(args, features, targets, data_class, path_to_data, name=name)
+    _, _, test_loader = train_multi_lstnet(args, features, targets, data_class, path_to_data, name=name)
 
     best_model = MultiLSTNet(args)
     best_model.load_state_dict(torch.load("{}.pth".format(name), map_location=torch.device("cpu")))
@@ -258,6 +258,7 @@ if __name__ == "__main__":
         'input_size': 50,
         'output_size': 12,
         'num_features': len(FEATURES),
+        'num_targets': len(TARGETS),
         'rnn_hid_size': 100,
         'cnn_hid_size': 100,
         'kernel_size': 4,
@@ -273,4 +274,4 @@ if __name__ == "__main__":
     args = AttrDict(args)
     name = "MultiLSTNet_categories"
 
-    best_category_model = main(args, FEATURES, FEATURES, Category, "UnileverShipmentPOS.csv", name)
+    best_category_model = main(args, FEATURES, TARGETS, Category, "UnileverShipmentPOS.csv", name)

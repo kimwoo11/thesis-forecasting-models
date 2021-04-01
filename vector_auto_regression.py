@@ -1,7 +1,7 @@
 from sklearn.metrics import mean_squared_error
 from statsmodels.tsa.api import VAR
 from statsmodels.tsa.stattools import adfuller
-from data_util import load_dataset, normalize_df
+from utils import load_dataset, normalize_df
 
 import pandas as pd
 import numpy as np
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     plt.suptitle("Lowest Error Prediction for Case UPC {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
-    plt.savefig("figures/lowest_error_prediction_cases.png")
+    plt.savefig("figures/VAR_cases_12_step.png")
 
     print("MSE Mean across all UPCs: ", np.mean(errors))  # 0.17677832878635388
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
     plt.suptitle("Lowest Error Prediction For Category {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
-    plt.savefig("figures/lowest_error_prediction_categories.png")
+    plt.savefig("figures/VAR_categories_12_step.png")
 
     print("MSE Mean across all categories: ", np.mean(errors))  # 0.32031955752873664
 

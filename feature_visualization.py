@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from data_util import load_dataset
+from utils import load_dataset
 
 if __name__ == "__main__":
     df = load_dataset("data/UnileverShipmentPOS.csv")

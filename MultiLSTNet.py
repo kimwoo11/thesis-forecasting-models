@@ -2,42 +2,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
 import matplotlib.pyplot as plt
-
 from data_loader import *
 from utils import RMSELoss
 from attrdict import AttrDict
-
-# Import when using ray tune
-# import torch
-# from functools import partial
-# from ray import tune
-# from ray.tune import CLIReporter
-# from ray.tune.schedulers import ASHAScheduler
+from ray import tune
 
 
-class LSTNet(nn.Module):
+class MultiLSTNet(nn.Module):
     def __init__(self, args):
-        super(LSTNet, self).__init__()
+        super(MultiLSTNet, self).__init__()
         self.input_size = args.input_size
         self.output_size = args.output_size
         self.num_features = args.num_features
         self.rnn_hid_size = args.rnn_hid_size
         self.cnn_hid_size = args.cnn_hid_size
-        self.skip_hid_size = args.skip_hid_size
         self.kernel_size = args.kernel_size
-        self.skip = args.skip
-        self.pt = (self.input_size - self.kernel_size) // self.skip
         self.highway_size = args.highway_size
         self.conv1 = nn.Conv2d(1, self.cnn_hid_size, kernel_size=(self.kernel_size, self.num_features))
-        self.GRU1 = nn.GRU(self.cnn_hid_size, self.rnn_hid_size)
+        self.LSTM1 = nn.LSTM(self.cnn_hid_size, self.rnn_hid_size)
         self.dropout = nn.Dropout(p=args.dropout)
-        if self.skip > 0:
-            self.GRUskip = nn.GRU(self.cnn_hid_size, self.skip_hid_size)
-            self.linear1 = nn.Linear(self.rnn_hid_size + self.skip * self.skip_hid_size, self.num_features)
-        else:
-            self.linear1 = nn.Linear(self.rnn_hid_size, self.num_features)
+        self.LSTM2 = nn.LSTM(self.rnn_hid_size, self.num_features)
+
         if self.highway_size > 0:
-            self.highway = nn.Linear(self.highway_size, 1)
+            self.highway = nn.Linear(self.highway_size, self.output_size)
         self.output = None
         if args.output_fun == 'sigmoid':
             self.output = torch.sigmoid
@@ -47,36 +34,28 @@ class LSTNet(nn.Module):
     def forward(self, x):
         batch_size = x.size(0)
 
-        # CNN
+        # CNN encoder
         c = x.view(-1, 1, self.input_size, self.num_features)
         c = F.relu(self.conv1(c))
         c = self.dropout(c)
         c = torch.squeeze(c, 3)
 
-        # RNN
+        # lstm encoder
         r = c.permute(2, 0, 1).contiguous()
-        temp, r = self.GRU1(r)
-        r = self.dropout(torch.squeeze(r, 0))
+        _, (r,_) = self.LSTM1(r)
+        r = self.dropout(r)
+        r = r.repeat(self.output_size, 1, 1)
 
-        # skip-rnn
-        if self.skip > 0:
-            s = c[:, :, int(-self.pt * self.skip):].contiguous()
-            s = s.view(batch_size, self.cnn_hid_size, self.pt, self.skip)
-            s = s.permute(2, 0, 3, 1).contiguous()
-            s = s.view(self.pt, batch_size * self.skip, self.cnn_hid_size)
-            _, s = self.GRUskip(s)
-            s = s.view(batch_size, self.skip * self.skip_hid_size)
-            s = self.dropout(s)
-            r = torch.cat((r, s), 1)
-
-        res = self.linear1(r)
+        # lstm decoder
+        res, _ = self.LSTM2(r)
+        res = res.permute(1, 0, 2).contiguous()
 
         # highway
         if self.highway_size > 0:
             z = x[:, -self.highway_size:, :]
             z = z.permute(0, 2, 1).contiguous().view(-1, self.highway_size)
             z = self.highway(z)
-            z = z.view(-1, self.num_features)
+            z = z.view(-1, self.output_size, self.num_features)
             res = res + z
 
         if self.output:
@@ -113,7 +92,7 @@ def train_lstnet(args, features, targets, data_class, path_to_data, name="LSTNet
         if not grid_search:
             print("Using CPU")
 
-    model = LSTNet(args).to(device)
+    model = MultiLSTNet(args).to(device)
     optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr,
                                  weight_decay=args.wd)
 
@@ -170,66 +149,26 @@ def train_lstnet(args, features, targets, data_class, path_to_data, name="LSTNet
         if not grid_search:
             print("Epoch: {:3d} | Train loss: {:.3f} | Val loss: {:.3f}".format(epoch, train_loss[epoch],
                                                                                 val_loss[epoch]))
-        # else:
-        #     tune.report(loss=val_loss[epoch])
+        else:
+            tune.report(loss=val_loss[epoch])
 
     if not grid_search:
         print("Training Complete")
         print("Best Validation Error ({}) at epoch {}".format(best_loss, best_epoch))
 
         # Plot Final Training Errors
-        fig, ax = plt.subplots(figsize=(15, 9))
+        fig, ax = plt.subplots(figsize=(15,9))
+        plt.grid(True)
         ax.plot(train_loss, linewidth=2, label="Training Loss")
         ax.plot(val_loss, linewidth=2, label="Validation Loss")
         ax.set_title("{} Training & Validation Losses".format(name))
         ax.set_xlabel("Epoch")
         ax.set_ylabel("MSE Loss")
         ax.legend()
-        ax.grid(True)
         fig.savefig("figures/{}.png".format(name))
         fig.show()
         print("Finished Training!")
     return train_loader, val_loader, test_loader
-
-
-# def run_tune(path_to_data, features, targets, max_num_epochs):
-#     num_features = len(features)
-#     args = {
-#         'input_size': tune.choice([4, 8, 12, 16, 20, 50, 100]),
-#         'output_size': 1,
-#         'num_features': num_features,
-#         'rnn_hid_size': tune.choice([50, 100, 200]),
-#         'cnn_hid_size': tune.choice([50, 100, 200]),
-#         'skip_hid_size': tune.choice([5, 20, 50, 100]),
-#         'kernel_size': 4,
-#         'skip': tune.choice([4, 8, 12]),
-#         'highway_size': 4,
-#         'dropout': 0.2,
-#         'output_fun': 'sigmoid',
-#         'lr': tune.choice([0.00001, 0.0001, 0.001, 0.01]),
-#         'wd': tune.choice([0.00005, 0.0005, 0.005]),
-#         'bs': tune.choice([16, 50, 100, 200, 300, 500]),
-#         'epochs': max_num_epochs
-#     }
-#     args = AttrDict(args)
-#
-#     scheduler = ASHAScheduler(
-#         metric="loss",
-#         mode="min",
-#         max_t=max_num_epochs)
-#     reporter = CLIReporter(
-#         # parameter_columns=["input_size", "rnn_hid_size", "cnn_hid_size", "skip_hid_size", "skip", "lr", "wd", "bs"],
-#         metric_columns=["loss"])
-#     result = tune.run(
-#         partial(train_lstnet, features=features, targets=targets, data_class=CaseUpc, path_to_data=path_to_data,
-#                 name="LSTNet", grid_search=True),
-#         resources_per_trial={"cpu": 1, "gpu": 1},
-#         config=args,
-#         num_samples=1,
-#         scheduler=scheduler,
-#         progress_reporter=reporter)
-#
-#     return result
 
 
 def test_loss(model, test_loader):
@@ -246,66 +185,65 @@ def test_loss(model, test_loader):
     return mean_test_loss
 
 
-def plot_multi_step(model, X, y, output_size, name, forecast_steps=1):
+def plot_multi_step(model, X, y, name, targets, forecast_steps=1):
     preds = list()
-    targets = y[:, 0]
     with torch.no_grad():
         for i in range(0, len(X), forecast_steps):
             curr_x = torch.unsqueeze(torch.tensor(X[i]).type(torch.FloatTensor), 0)  # curr input to model
-            for j in range(forecast_steps):
-                if i+j >= len(X):
-                    break
-                pred = model(curr_x)
-                curr_x = torch.cat((curr_x[:, 1:], torch.unsqueeze(pred, 0)), 1)
-                preds.append(np.squeeze(pred.cpu().numpy()))
+            pred = model(curr_x)
+            preds.append(np.squeeze(pred.cpu().numpy()))
 
     preds = np.array(preds)
-    fig, ax = plt.subplots(figsize=(15, 9))
-    fig.suptitle("{} {} Step Forecasts on Sample Time Series".format(name, forecast_steps), fontsize=16)
-    ax.plot(preds[-output_size:, 0], label="preds")
-    ax.plot(targets[-output_size:, 0], label="targets")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig("figures/{}_{}_step.png".format(name, forecast_steps))
+    nrows=len(targets)
+    fig, ax = plt.subplots(nrows=nrows, figsize=(12, 12))
+    fig.suptitle("{} 12 Step Forecasts on Sample Time Series".format(name), fontsize=16)
+    for i in range(nrows):
+        ax[i].plot(preds[-1, :, i], label="Forecast")
+        ax[i].plot(y[-1, :, i], label="Target")
+        ax[i].legend()
+        ax[i].set_title("{} Forecast vs Target".format(targets[i]))
+        ax[i].grid(True)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig.savefig("figures/{}_{}_step_plot.png".format(name, forecast_steps))
 
 
-def best_multi_step(model, ts, keys, forecast_steps=1):
+def best_multi_step(model, ts, keys):
     """ Returns the best performing time series and its loss, as well as the total mean loss of the given dataset
     Args:
         model: trained model to evaluated
-        ts: a time series dataset; either CaseUpc.case_to_ts, or Category.cat_to_ts
+        ts: a time series dataset dictionary; either CaseUpc.case_to_ts, or Category.cat_to_ts
         keys: case_to_ts.keys(), or cat_to_ts.keys()
         forecast_steps: number of forecast steps we want to evaluate the model on
     """
     loss_f = RMSELoss()
     best_loss = float('inf')
     best_X, best_y = None, None
-    total_loss = list()
+    total_loss = list() # across all datasets
     for key in keys:
         curr_loss = 0
-        X, y = ts[key].X, ts[key].y
         with torch.no_grad():
-            for i in range(0, len(X), forecast_steps):
-                curr_x = torch.unsqueeze(torch.tensor(X[i]).type(torch.FloatTensor), 0)
-                for j in range(forecast_steps):
-                    if i+j >= len(X):
-                        break
-                    pred = model(curr_x)
-                    label = torch.tensor(y[i+j]).type(torch.FloatTensor)
-                    curr_x = torch.cat((curr_x[:, 1:], torch.unsqueeze(pred, 0)), 1)
-                    curr_loss += loss_f(pred, label).item() / len(X)
+            curr_dataset = ts[key]
+            curr_loader = torch.utils.data.DataLoader(curr_dataset, shuffle=True, num_workers=0)
+            data_len = len(curr_dataset)
+            for data in curr_loader:
+                X = data["input"].type(torch.FloatTensor)
+                label = data["label"].type(torch.FloatTensor)  # Load labels
+                pred = model(X)
+                curr_loss += loss_f(pred, label).item() / data_len
+
         total_loss.append(curr_loss)
         if curr_loss < best_loss:
             best_loss = curr_loss
-            best_X, best_y = X, y
+            best_X, best_y = curr_dataset.X, curr_dataset.y
+
     return best_X, best_y, best_loss, np.mean(total_loss)
 
 
-def main(args, features, targets, data_class, path_to_data, name="LSTNet"):
+def main(args, features, targets, data_class, path_to_data, name="MultiLSTNet"):
     args = AttrDict(args)
     _, _, test_loader = train_lstnet(args, features, targets, data_class, path_to_data, name=name)
 
-    best_model = LSTNet(args)
+    best_model = MultiLSTNet(args)
     best_model.load_state_dict(torch.load("{}.pth".format(name), map_location=torch.device("cpu")))
     best_model.train(False)
     best_model.eval()
@@ -316,40 +254,13 @@ def main(args, features, targets, data_class, path_to_data, name="LSTNet"):
 
 
 if __name__ == "__main__":
-    # Cases
     args = {
-        'input_size': 50,  # decreasing didn't help
-        'output_size': 1,
+        'input_size': 50,
+        'output_size': 12,
         'num_features': len(FEATURES),
-        'rnn_hid_size': 200,  # increasing helped
-        'cnn_hid_size': 200,
-        'skip_hid_size': 4,
+        'rnn_hid_size': 100,
+        'cnn_hid_size': 100,
         'kernel_size': 4,
-        'skip': 4,
-        'highway_size': 4,
-        'dropout': 0.1,
-        'output_fun': 'sigmoid',
-        'lr': 0.0001,
-        'wd': 0.0005,
-        'bs': 1000,
-        'epochs': 100
-    }
-
-    args = AttrDict(args)
-    name = "LSTNet_cases"
-
-    best_case_model = main(args, FEATURES, FEATURES, CaseUpc, "UnileverShipmentPOS.csv", name)
-
-    # Categories
-    args = {
-        'input_size': 50,  # decreasing didn't help
-        'output_size': 1,
-        'num_features': len(FEATURES),
-        'rnn_hid_size': 200,  # increasing helped
-        'cnn_hid_size': 200,
-        'skip_hid_size': 4,
-        'kernel_size': 4,
-        'skip': 4,
         'highway_size': 4,
         'dropout': 0.1,
         'output_fun': 'sigmoid',
@@ -360,6 +271,6 @@ if __name__ == "__main__":
     }
 
     args = AttrDict(args)
-    name = "LSTNet_categories"
+    name = "MultiLSTNet_categories"
 
     best_category_model = main(args, FEATURES, FEATURES, Category, "UnileverShipmentPOS.csv", name)

@@ -1,5 +1,5 @@
 from data_loader import CaseUpc, Category
-from data_util import load_dataset
+from utils import load_dataset
 from config import *
 from sklearn.preprocessing import MinMaxScaler
 
@@ -57,8 +57,8 @@ if __name__ == "__main__":
     df = load_dataset("data/UnileverShipmentPOS.csv")
     n_in = 20
     n_out = 12
-    case_upc_dataset = CaseUpc(n_in, n_out, FEATURES, TARGETS)
-    category_dataset = Category(n_in, n_out, FEATURES, TARGETS)
+    case_upc_dataset = CaseUpc("data/UnileverShipmentPOS.csv", n_in, n_out, FEATURES, TARGETS)
+    category_dataset = Category("data/UnileverShipmentPOS.csv", n_in, n_out, FEATURES, TARGETS)
 
     case_all_scores = plot_mi_scores(case_upc_dataset.upc_to_ts, 5, "MI Scores of 25 Case UPCs", "Case_UPC")
     category_all_scores = plot_mi_scores(category_dataset.category_to_ts, 4, "MI Scores of 16 Categories", "Categories")

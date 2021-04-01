@@ -14,6 +14,7 @@ class MultiLSTNet(nn.Module):
         self.input_size = args.input_size
         self.output_size = args.output_size
         self.num_features = args.num_features
+        self.num_targets = args.num_targets
         self.rnn_hid_size = args.rnn_hid_size
         self.cnn_hid_size = args.cnn_hid_size
         self.kernel_size = args.kernel_size
@@ -178,7 +179,7 @@ def test_loss(model, test_loader):
     with torch.no_grad():
         for data in test_loader:
             X = data["input"].type(torch.FloatTensor)  # Load Input data
-            label = torch.squeeze(data["label"].type(torch.FloatTensor))  # Load labels
+            label = data["label"].type(torch.FloatTensor)  # Load labels
             pred = model(X)
             mean_test_loss += loss_f(pred, label).item() / test_len
 
@@ -197,12 +198,19 @@ def plot_multi_step(model, X, y, name, targets, forecast_steps=1):
     nrows=len(targets)
     fig, ax = plt.subplots(nrows=nrows, figsize=(12, 12))
     fig.suptitle("{} 12 Step Forecasts on Sample Time Series".format(name), fontsize=16)
-    for i in range(nrows):
-        ax[i].plot(preds[-1, :, i], label="Forecast")
-        ax[i].plot(y[-1, :, i], label="Target")
-        ax[i].legend()
-        ax[i].set_title("{} Forecast vs Target".format(targets[i]))
-        ax[i].grid(True)
+    if nrows > 1:
+        for i in range(nrows):
+            ax[i].plot(preds[-1, :, i], label="Forecast")
+            ax[i].plot(y[-1, :, i], label="Target")
+            ax[i].legend()
+            ax[i].set_title("{} Forecast vs Target".format(targets[i]))
+            ax[i].grid(True)
+    else:
+        ax.plot(preds[-1, :], label="Forecast")
+        ax.plot(y[-1, :], label="Target")
+        ax.legend()
+        ax.set_title("{} Forecast vs Target".format(targets[0]))
+        ax.grid(True)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     fig.savefig("figures/{}_{}_step.png".format(name, forecast_steps))
 

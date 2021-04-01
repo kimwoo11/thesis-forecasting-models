@@ -64,6 +64,7 @@ class SimpleTCN(nn.Module):
         super(SimpleTCN, self).__init__()
         L = args.input_size     # look back
         P = args.output_size    # prediction horizon
+        self.num_targets = args.num_targets
         K = 8
         d = 2
         self.L = L
@@ -83,7 +84,7 @@ class SimpleTCN(nn.Module):
         self.tconv5 = TConvBlock(L, 64, 128, K, d)
         self.bn5 = torch.nn.BatchNorm1d(128)
         self.relu5 = torch.nn.ReLU()
-        self.tconv6 = TConvBlock(L, 128, 1, K, d)
+        self.tconv6 = TConvBlock(L, 128, self.num_targets, K, d)
 
     def forward(self, input):
         # Assume X: batch by length by channel size
@@ -97,6 +98,7 @@ class SimpleTCN(nn.Module):
         x6 = self.tconv6(x5)
         # print(x.shape)
         x7 = x6[:, :, self.L-self.P:]
+        # print(x7.size())
         return torch.transpose(x7, 1, 2)
 
 def load_data(data_class, device, path_to_data, input_size, output_size, features, targets, bs):
@@ -241,9 +243,9 @@ def plot_multi_step(model, X, y, name, targets, forecast_steps=1):
 
     preds = np.array(preds)
     nrows=len(targets)
-    fig, ax = plt.subplots(nrows=nrows, figsize=(12, 12))
-    fig.suptitle("{} 12 Step Forecasts on Sample Time Series".format(name), fontsize=16)
     if nrows > 1:
+        fig, ax = plt.subplots(nrows=nrows, figsize=(12,12))
+        fig.suptitle("{} 12 Step Forecasts on Sample Time Series".format(name), fontsize=16)
         for i in range(nrows):
             ax[i].plot(preds[-1, :, i], label="Forecast")
             ax[i].plot(y[-1, :, i], label="Target")
@@ -251,13 +253,15 @@ def plot_multi_step(model, X, y, name, targets, forecast_steps=1):
             ax[i].set_title("{} Forecast vs Target".format(targets[i]))
             ax[i].grid(True)
     else:
+        fig, ax = plt.subplots(nrows=nrows, figsize=(12,9))
+        fig.suptitle("{} 12 Step Forecasts on Sample Time Series".format(name), fontsize=16)
         ax.plot(preds[-1, :], label="Forecast")
         ax.plot(y[-1, :], label="Target")
         ax.legend()
         ax.set_title("{} Forecast vs Target".format(targets[0]))
         ax.grid(True)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig.savefig("figures/{}_{}_step_plot.png".format(name, forecast_steps))
+    fig.savefig("figures/{}_{}_step.png".format(name, forecast_steps))
 
 
 def best_multi_step(model, ts, keys):
@@ -290,17 +294,3 @@ def best_multi_step(model, ts, keys):
             best_X, best_y = curr_dataset.X, curr_dataset.y
 
     return best_X, best_y, best_loss, np.mean(total_loss)
-
-
-if __name__ == "__main__":
-    args = {
-        'input_size': 20,  # decreasing didn't help
-        'output_size': 12,
-        'num_features': len(FEATURES),
-        'lr': 0.001,
-        'wd': 0.0005,
-        'bs': 100,
-        'epochs': 200
-    }
-
-    best_model = main(args, FEATURES, TARGETS, Category, "UnileverShipmentPOS.csv", "TCN_categories")

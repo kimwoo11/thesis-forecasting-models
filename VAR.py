@@ -1,7 +1,8 @@
 from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
 from statsmodels.tsa.api import VAR
 from statsmodels.tsa.stattools import adfuller
-from utils import load_dataset, normalize_df
+from data_loader import load_csv
 
 import pandas as pd
 import numpy as np
@@ -51,6 +52,12 @@ def calc_rmse(pred, df_test):
     return np.sqrt(mean_squared_error(pred, df_test))
 
 
+def calc_accuracy(pred, df_test):
+    df_test[df_test == 0] = 0.01
+    diff = abs(df_test - pred) / df_test
+    return np.mean(1 - diff)
+
+
 def evaluate(ts, n_in, n_out):
     df_train = ts[:-n_out]
     df_test = ts[-n_out:]
@@ -76,91 +83,122 @@ def evaluate(ts, n_in, n_out):
     if num_diff > 0:
         df_pred = invert_transformation(df_train, df_pred)
 
-    return calc_rmse(df_pred['ShipmentCases'], df_test['ShipmentCases']), df_pred
+    return calc_accuracy(df_pred['ShipmentCases'], df_test['ShipmentCases']), df_pred
+
+
+def normalize_df(df):
+    values = df.values
+    # normalize features
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled = scaler.fit_transform(values)
+    # created normalized dataframe
+    scaled_df = pd.DataFrame(scaled)
+    scaled_df.index = df.index
+    scaled_df.columns = df.columns
+    return scaled_df
 
 
 if __name__ == "__main__":
-    df = load_dataset("data/UnileverShipmentPOS.csv")
+    df = load_csv("data/UnileverShipmentPOS.csv")
     n_in = 20
     n_out = 12
 
     features = ['ShipmentCases', 'POSCases']
     cases = df.CASE_UPC_CD.unique()
 
-    errors = []
+    accs = []
     best_case = None
-    best_error = float('inf')
+    best_acc = 0
     best_pred = None
     for case in cases:
         ts = df[df.CASE_UPC_CD == case][features].dropna()
-        if ts.shape[0] > 100:
+        if ts.shape[0] > 200:
             ts = normalize_df(ts)
-            error, df_pred = evaluate(ts, n_in, n_out)
-            if error is not None:
-                errors.append(error)
-                if error < best_error:
-                    best_error = error
+            acc, df_pred = evaluate(ts, n_in, n_out)
+            if acc is not None:
+                accs.append(acc)
+                if acc > best_acc:
+                    best_acc = acc
                     best_case = case
                     best_pred = df_pred
-
+    print("Best Accuracy: ", best_acc)
     best_ts = df[df.CASE_UPC_CD == best_case][features].dropna()
     best_ts = normalize_df(best_ts)
 
-    fig, axes = plt.subplots(nrows=int(len(best_ts.columns)), figsize=(15, 9))
-    for i, (col, ax) in enumerate(zip(best_ts.columns, axes.flatten())):
-        best_pred[col].plot(legend=True, ax=ax, label="Predictions").autoscale(axis='x', tight=True)
-        best_ts[col][-n_out:].plot(legend=True, ax=ax, label="Targets")
-        ax.set_title(col + ": Forecast vs Actuals")
-        ax.xaxis.set_ticks_position('none')
-        ax.yaxis.set_ticks_position('none')
-        ax.spines["top"].set_alpha(0)
-        ax.tick_params(labelsize=6)
-        ax.grid(True)
+    fig, ax = plt.subplots(figsize=(15, 9))
+    col = "ShipmentCases"
+    best_pred[col].plot(legend=True, label="Predictions").autoscale(axis='x', tight=True)
+    best_ts[col][-n_out:].plot(legend=True, ax=ax, label="Targets")
+    ax.set_title(col + ": Forecast vs Actuals")
+    ax.xaxis.set_ticks_position('none')
+    ax.yaxis.set_ticks_position('none')
+    ax.spines["top"].set_alpha(0)
+    ax.tick_params(labelsize=6)
+    ax.grid(True)
 
-    plt.suptitle("Lowest Error Prediction for Case UPC {}".format(best_case), fontsize=16)
+    plt.suptitle("Highest Accuracy Prediction for Case UPC {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
     plt.savefig("figures/VAR_cases_12_step.png")
 
-    print("MSE Mean across all UPCs: ", np.mean(errors))  # 0.17677832878635388
+    # plot accuracy histogram
+    fig, ax = plt.subplots(figsize=(15, 9))
+    ax.hist(accs, bins=40)
+    ax.grid(True)
+    ax.set_title("Accuracy Histogram for CaseUPC")
+    plt.tight_layout()
+    plt.savefig("figures/VAR_upc_accuracy_histogram.png")
+
+    print("Median accuracy across all UPCs: ", np.median(accs))
 
     categories = df.CategoryDesc.unique()
 
-    errors = []
+    accs = []
     best_case = None
-    best_error = float('inf')
+    best_acc = 0
     best_pred = None
     for cat in categories:
         ts = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
-        if ts.shape[0] > 100:
+        if ts.shape[0] > 200:
             ts = normalize_df(ts)
-            error, df_pred = evaluate(ts, n_in, n_out)
-            errors.append(error)
-            if error < best_error:
-                best_error = error
+            acc, df_pred = evaluate(ts, n_in, n_out)
+            accs.append(acc)
+            if acc > best_acc:
+                best_acc = acc
                 best_case = cat
                 best_pred = df_pred
 
+    print("Best Accuracy: ", best_acc)
     best_ts = df[df.CategoryDesc == best_case][features].dropna().groupby('WeekNumber').sum()
     best_ts = normalize_df(best_ts)
 
-    fig, axes = plt.subplots(nrows=int(len(best_ts.columns)), figsize=(15, 9))
-    for i, (col, ax) in enumerate(zip(best_ts.columns, axes.flatten())):
-        best_pred[col].plot(legend=True, ax=ax, label="Predictions").autoscale(axis='x', tight=True)
-        best_ts[col][-n_out:].plot(legend=True, ax=ax, label="Targets")
-        ax.set_title(col + ": Forecast vs Actuals")
-        ax.xaxis.set_ticks_position('none')
-        ax.yaxis.set_ticks_position('none')
-        ax.spines["top"].set_alpha(0)
-        ax.tick_params(labelsize=6)
-        ax.grid(True)
+    fig, ax = plt.subplots(figsize=(15, 9))
+    col = "ShipmentCases"
+    best_pred[col].plot(legend=True, label="Predictions").autoscale(axis='x', tight=True)
+    best_ts[col][-n_out:].plot(legend=True, label="Targets")
+    ax.set_title(col + ": Forecast vs Actuals")
+    ax.xaxis.set_ticks_position('none')
+    ax.yaxis.set_ticks_position('none')
+    ax.spines["top"].set_alpha(0)
+    ax.tick_params(labelsize=6)
+    ax.grid(True)
 
-    plt.suptitle("Lowest Error Prediction For Category {}".format(best_case), fontsize=16)
+    plt.suptitle("Highest Accuracy Prediction For Category {}".format(best_case), fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
     plt.savefig("figures/VAR_categories_12_step.png")
 
-    print("MSE Mean across all categories: ", np.mean(errors))  # 0.32031955752873664
+    # plot accuracy histogram
+    fig, ax = plt.subplots(figsize=(15, 9))
+    ax.hist(accs, bins=40)
+    ax.set_title("Accuracy Histogram for Category")
+    ax.grid(True)
+    plt.tight_layout()
+    plt.savefig("figures/VAR_category_accuracy_histogram.png")
 
-    # With ShipmentPricePerUnit:
-    #   UPCs: 0.2760834587103174
-    #   Categories: 0.3412113133204744
+    print("Median accuracy across all categories: ", np.median(accs))
 
+"""    
+Best Accuracy: 0.900303317923492
+Median accuracy across all UPCs: 0.03443253810424375
+Best Accuracy: 0.6750380114543121
+Median accuracy across all categories: 0.020290658609166245
+"""

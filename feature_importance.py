@@ -1,5 +1,4 @@
-from data_loader import CaseUpc, Category
-from utils import load_dataset
+from data_loader import CaseUpc, Category, load_csv
 from config import *
 from sklearn.preprocessing import MinMaxScaler
 
@@ -54,7 +53,7 @@ def plot_average_mi_scores(all_scores, name):
 
 
 if __name__ == "__main__":
-    df = load_dataset("data/UnileverShipmentPOS.csv")
+    df = load_csv("data/UnileverShipmentPOS.csv")
     n_in = 20
     n_out = 12
     case_upc_dataset = CaseUpc("data/UnileverShipmentPOS.csv", n_in, n_out, FEATURES, TARGETS)

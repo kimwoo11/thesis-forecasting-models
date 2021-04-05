@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
-from utils import load_dataset
+from data_loader import load_csv
 
 if __name__ == "__main__":
-    df = load_dataset("data/UnileverShipmentPOS.csv")
+    df = load_csv("data/UnileverShipmentPOS.csv")
 
     # Data setup
     ALL_FEATURES = ['ShipmentCases', 'ShipmentUnits', 'ShipmentNSV', 'DispatchedQty', 'FinalCustomerExpectedOrderQty',

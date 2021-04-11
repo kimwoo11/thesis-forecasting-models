@@ -2,7 +2,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from statsmodels.tsa.api import VAR
 from statsmodels.tsa.stattools import adfuller
-from data_loader import load_csv
+from datasets import load_csv
 
 import pandas as pd
 import numpy as np
@@ -102,6 +102,7 @@ if __name__ == "__main__":
     df = load_csv("data/UnileverShipmentPOS.csv")
     n_in = 20
     n_out = 12
+    results = []
 
     features = ['ShipmentCases', 'POSCases']
     cases = df.CASE_UPC_CD.unique()
@@ -117,11 +118,12 @@ if __name__ == "__main__":
             acc, df_pred = evaluate(ts, n_in, n_out)
             if acc is not None:
                 accs.append(acc)
-                if acc > best_acc:
+                if acc >= best_acc:
                     best_acc = acc
                     best_case = case
                     best_pred = df_pred
     print("Best Accuracy: ", best_acc)
+
     best_ts = df[df.CASE_UPC_CD == best_case][features].dropna()
     best_ts = normalize_df(best_ts)
 
@@ -149,6 +151,7 @@ if __name__ == "__main__":
     plt.savefig("figures/VAR_upc_accuracy_histogram.png")
 
     print("Median accuracy across all UPCs: ", np.median(accs))
+    print("Mean accuracy across all UPCs: ", np.mean(accs))
 
     categories = df.CategoryDesc.unique()
 
@@ -195,10 +198,13 @@ if __name__ == "__main__":
     plt.savefig("figures/VAR_category_accuracy_histogram.png")
 
     print("Median accuracy across all categories: ", np.median(accs))
+    print("Mean accuracy across all categories: ", np.mean(accs))
 
 """    
-Best Accuracy: 0.900303317923492
-Median accuracy across all UPCs: 0.03443253810424375
-Best Accuracy: 0.6750380114543121
-Median accuracy across all categories: 0.020290658609166245
+Best Accuracy:  0.900303317923492
+Median accuracy across all UPCs:  0.03443253810424375
+Mean accuracy across all UPCs:  -0.914792513710377
+Best Accuracy:  0.6750380114543121
+Median accuracy across all categories:  0.020290658609166245
+Mean accuracy across all categories:  0.16340286057845702
 """

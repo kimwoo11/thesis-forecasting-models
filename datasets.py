@@ -14,7 +14,7 @@ class CaseUpc(Dataset):
     def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
         print("Loading CaseUPC Dataset")
         df = load_csv(path_to_dataset)
-        self.cases = np.load("data/tv_cases.npy")
+        self.cases = df.CASE_UPC_CD.unique()
         self.upc_to_ts = defaultdict(Single)  # upc to time series mapping
         self.targets = ['ShipmentCases'] if targets is None else targets
         self.n_in = n_in  # number of input time steps
@@ -26,7 +26,123 @@ class CaseUpc(Dataset):
 
         for case in self.cases:
             ds = df[df.CASE_UPC_CD == case][features].dropna()
+            if ds.shape[0] < 200:
+                continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
+            self.upc_to_ts[case].X = X
+            self.upc_to_ts[case].y = y
+            self.upc_to_ts[case].agg = agg
+            self.upc_to_ts[case].scaler = scaler
+            self.upc_to_ts[case].ds = ds
+
+            if self.X is None:
+                self.X = X
+            else:
+                self.X = np.concatenate((self.X, X), axis=0)
+
+            if self.y is None:
+                self.y = y
+            else:
+                self.y = np.concatenate((self.y, y), axis=0)
+
+            if self.agg is None:
+                self.agg = agg
+            else:
+                self.agg = self.agg.append(agg, ignore_index=True)
+        print("Successfully loaded the CaseUPC dataset")
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        sample = {'input': self.X[idx, :, :], 'label': self.y[idx, :, :]}
+
+        return sample
+
+
+class CaseUpcTV(Dataset):
+    def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
+        print("Loading CaseUPC Dataset")
+        df = load_csv(path_to_dataset)
+        self.cases = df.CASE_UPC_CD.unique()
+        self.upc_to_ts = defaultdict(Single)  # upc to time series mapping
+        self.targets = ['ShipmentCases'] if targets is None else targets
+        self.n_in = n_in  # number of input time steps
+        self.n_out = n_out  # forecasting time horizon
+        self.features = features
+        self.X = None  # (num_samples, n_in, num_features)
+        self.y = None  # (num_samples, n_out, num_targets)
+        self.agg = None
+
+        for case in self.cases:
+            ds = df[df.CASE_UPC_CD == case][features].dropna()
+            if ds.shape[0] < 200:
+                continue
+            X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
+            X = X[:-n_in]
+            y = y[:-n_in]
+            agg = agg.iloc[:-n_in]
+            ds = ds.iloc[:-n_in]
+            self.upc_to_ts[case].X = X
+            self.upc_to_ts[case].y = y
+            self.upc_to_ts[case].agg = agg
+            self.upc_to_ts[case].scaler = scaler
+            self.upc_to_ts[case].ds = ds
+
+            if self.X is None:
+                self.X = X
+            else:
+                self.X = np.concatenate((self.X, X), axis=0)
+
+            if self.y is None:
+                self.y = y
+            else:
+                self.y = np.concatenate((self.y, y), axis=0)
+
+            if self.agg is None:
+                self.agg = agg
+            else:
+                self.agg = self.agg.append(agg, ignore_index=True)
+        print("Successfully loaded the CaseUPC dataset")
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        sample = {'input': self.X[idx, :, :], 'label': self.y[idx, :, :]}
+
+        return sample
+
+
+class CaseUpcTest(Dataset):
+    def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
+        print("Loading CaseUPC Dataset")
+        df = load_csv(path_to_dataset)
+        self.cases = df.CASE_UPC_CD.unique()
+        self.upc_to_ts = defaultdict(Single)  # upc to time series mapping
+        self.targets = ['ShipmentCases'] if targets is None else targets
+        self.n_in = n_in  # number of input time steps
+        self.n_out = n_out  # forecasting time horizon
+        self.features = features
+        self.X = None  # (num_samples, n_in, num_features)
+        self.y = None  # (num_samples, n_out, num_targets)
+        self.agg = None
+
+        for case in self.cases:
+            ds = df[df.CASE_UPC_CD == case][features].dropna()
+            if ds.shape[0] < 200:
+                continue
+            X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
+            X = np.expand_dims(X[-1], axis=0)
+            y = np.expand_dims(y[-1], axis=0)
+            agg = agg.iloc[-1]
+
             self.upc_to_ts[case].X = X
             self.upc_to_ts[case].y = y
             self.upc_to_ts[case].agg = agg
@@ -60,12 +176,12 @@ class CaseUpc(Dataset):
         return sample
 
 
-class CaseUpcTest(Dataset):
+class Category(Dataset):
     def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
-        print("Loading CaseUPC Test Dataset")
+        print("Loading Category Dataset")
         df = load_csv(path_to_dataset)
-        self.cases = np.load("data/test_cases.npy")
-        self.upc_to_ts = defaultdict(Single)  # upc to time series mapping
+        self.categories = df.CategoryDesc.unique()
+        self.category_to_ts = defaultdict(Single)  # upc to time series mapping
         self.targets = ['ShipmentCases'] if targets is None else targets
         self.n_in = n_in  # number of input time steps
         self.n_out = n_out  # forecasting time horizon
@@ -74,13 +190,16 @@ class CaseUpcTest(Dataset):
         self.y = None  # (num_samples, n_out, num_targets)
         self.agg = None
 
-        for case in self.cases:
-            ds = df[df.CASE_UPC_CD == case][features].dropna()
+        for cat in self.categories:
+            ds = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
+            if ds.shape[0] < 200:
+                continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
-            self.upc_to_ts[case].X = X
-            self.upc_to_ts[case].y = y
-            self.upc_to_ts[case].agg = agg
-            self.upc_to_ts[case].scaler = scaler
+            self.category_to_ts[cat].X = X
+            self.category_to_ts[cat].y = y
+            self.category_to_ts[cat].agg = agg
+            self.category_to_ts[cat].scaler = scaler
+            self.category_to_ts[cat].ds = ds
 
             if self.X is None:
                 self.X = X
@@ -96,7 +215,7 @@ class CaseUpcTest(Dataset):
                 self.agg = agg
             else:
                 self.agg = self.agg.append(agg, ignore_index=True)
-        print("Successfully loaded the CaseUPC Test dataset")
+        print("Successfully loaded the Category dataset")
 
     def __len__(self):
         return self.X.shape[0]
@@ -110,11 +229,11 @@ class CaseUpcTest(Dataset):
         return sample
 
 
-class Category(Dataset):
+class CategoryTV(Dataset):
     def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
         print("Loading Category Dataset")
         df = load_csv(path_to_dataset)
-        self.categories = np.load("data/tv_categories.npy")
+        self.categories = df.CategoryDesc.unique()
         self.category_to_ts = defaultdict(Single)  # upc to time series mapping
         self.targets = ['ShipmentCases'] if targets is None else targets
         self.n_in = n_in  # number of input time steps
@@ -126,11 +245,19 @@ class Category(Dataset):
 
         for cat in self.categories:
             ds = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
+            if ds.shape[0] < 200:
+                continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
+            X = X[:-n_in]
+            y = y[:-n_in]
+            agg = agg.iloc[:-n_in]
+            ds = ds.iloc[:-n_in]
+
             self.category_to_ts[cat].X = X
             self.category_to_ts[cat].y = y
             self.category_to_ts[cat].agg = agg
             self.category_to_ts[cat].scaler = scaler
+            self.category_to_ts[cat].ds = ds
 
             if self.X is None:
                 self.X = X
@@ -162,9 +289,9 @@ class Category(Dataset):
 
 class CategoryTest(Dataset):
     def __init__(self, path_to_dataset, n_in, n_out, features=None, targets=None):
-        print("Loading Category Test Dataset")
+        print("Loading Category Dataset")
         df = load_csv(path_to_dataset)
-        self.categories = np.load("data/test_categories.npy")
+        self.categories = df.CategoryDesc.unique()
         self.category_to_ts = defaultdict(Single)  # upc to time series mapping
         self.targets = ['ShipmentCases'] if targets is None else targets
         self.n_in = n_in  # number of input time steps
@@ -173,15 +300,21 @@ class CategoryTest(Dataset):
         self.X = None  # (num_samples, n_in, num_features)
         self.y = None  # (num_samples, n_out, num_targets)
         self.agg = None
-        self.scalers = []
 
         for cat in self.categories:
             ds = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
+            if ds.shape[0] < 200:
+                continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
+            X = np.expand_dims(X[-1], axis=0)
+            y = np.expand_dims(y[-1], axis=0)
+            agg = agg.iloc[-1]
+
             self.category_to_ts[cat].X = X
             self.category_to_ts[cat].y = y
             self.category_to_ts[cat].agg = agg
             self.category_to_ts[cat].scaler = scaler
+            self.category_to_ts[cat].ds = ds
 
             if self.X is None:
                 self.X = X
@@ -197,7 +330,7 @@ class CategoryTest(Dataset):
                 self.agg = agg
             else:
                 self.agg = self.agg.append(agg, ignore_index=True)
-        print("Successfully loaded the Category Test dataset")
+        print("Successfully loaded the Category dataset")
 
     def __len__(self):
         return self.X.shape[0]
@@ -212,10 +345,11 @@ class CategoryTest(Dataset):
 
 
 class Single(Dataset):
-    def __init__(self, X=None, y=None, agg=None, scaler=None):
+    def __init__(self, X=None, y=None, agg=None, scaler=None, ds=None):
         self.X = X
         self.y = y
         self.agg = agg
+        self.ds = ds
         self.scaler = scaler
 
     def __len__(self):

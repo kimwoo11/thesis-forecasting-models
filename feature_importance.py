@@ -1,4 +1,4 @@
-from data_loader import CaseUpc, Category, load_csv
+from datasets import CaseUpc, Category, load_csv
 from config import *
 from sklearn.preprocessing import MinMaxScaler
 

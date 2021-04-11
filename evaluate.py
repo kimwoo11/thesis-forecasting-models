@@ -7,7 +7,7 @@ from sklearn.metrics import r2_score
 from TCN import *
 from MultiLSTNet import *
 from LSTNet import *
-from data_loader import CategoryTest, CaseUpcTest
+from datasets import CaseUpcTest, CategoryTest
 from train_utils import RMSELoss
 
 
@@ -59,6 +59,7 @@ class EvaluateMultiStep(object):
         self.results['median_acc'] = np.median(accuracies)
         self.results['mean_acc'] = np.mean(accuracies)
         self.results['median_bias'] = np.median(biases)
+        self.results['mean_bias'] = np.mean(biases)
         self.results['best_loss'] = np.min(losses)
         self.results['best_acc'] = np.max(accuracies)
         self.results['best_bias'] = np.min(biases)
@@ -103,6 +104,7 @@ class EvaluateMultiStep(object):
         self.results['median_acc'] = np.median(accuracies)
         self.results['mean_acc'] = np.mean(accuracies)
         self.results['median_bias'] = np.median(biases)
+        self.results['mean_bias'] = np.mean(biases)
         self.results['best_loss'] = np.min(losses)
         self.results['best_acc'] = np.max(accuracies)
         self.results['best_bias'] = np.min(biases)
@@ -120,8 +122,8 @@ class EvaluateMultiStep(object):
         """Plots highest accuracy forecast vs target
         """
         fig, ax = plt.subplots(figsize=(15, 9))
-        ax.plot(self.best_y[:, 0], label="Target")
-        ax.plot(self.best_pred[:, 0], label="Prediction")
+        ax.plot(self.best_y[:, 0], color="blue", label="Target")
+        ax.plot(self.best_pred[:, 0], color="red", label="Prediction")
         ax.legend()
         ax.set_title("ShipmentCases Forecast vs Target for {}".format(self.name))
         ax.grid(True)
@@ -130,7 +132,7 @@ class EvaluateMultiStep(object):
 
     def plot_hist(self):
         fig, ax = plt.subplots(figsize=(15, 9))
-        ax.hist(self.accuracies, bins=30)
+        ax.hist(self.accuracies, bins=30, color="purple")
         ax.set_title("Accuracy Histogram for {}".format(self.name))
         ax.grid(True)
         fig.tight_layout()
@@ -150,6 +152,7 @@ def load_model(model_object, name, args):
 
 
 if __name__ == "__main__":
+    path_to_data = 'data/UnileverShipmentPOS.csv'
     # LSTNet_upc
     name = "LSTNet_upc"
     features = FEATURES
@@ -170,9 +173,8 @@ if __name__ == "__main__":
         'bs': 1000,
     }
     args = AttrDict(args)
-    case_test_set = CaseUpcTest('data/UnileverShipmentPOS.csv', args.input_size, 12, features,
-                                targets)
-    test_loader = torch.utils.data.DataLoader(case_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CaseUpcTest(path_to_data, args.input_size, 12, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     LSTNet_upc = load_model(LSTNet, name, args)
     LSTNet_upc_eval = EvaluateMultiStep(LSTNet_upc, test_loader, name)
     LSTNet_upc_eval.run_rolling()
@@ -199,9 +201,8 @@ if __name__ == "__main__":
     }
 
     args = AttrDict(args)
-    category_test_set = CategoryTest('data/UnileverShipmentPOS.csv', args.input_size, 12, features,
-                                     targets)
-    test_loader = torch.utils.data.DataLoader(category_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CategoryTest(path_to_data, args.input_size, 12, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     LSTNet_category = load_model(LSTNet, name, args)
     LSTNet_category_eval = EvaluateMultiStep(LSTNet_category, test_loader, name)
     LSTNet_category_eval.run_rolling()
@@ -225,16 +226,15 @@ if __name__ == "__main__":
         'epochs': 200
     }
     args = AttrDict(args)
-    case_test_set = CaseUpcTest('data/UnileverShipmentPOS.csv', args.input_size, args.output_size, features,
-                                targets)
-    test_loader = torch.utils.data.DataLoader(case_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CaseUpcTest(path_to_data, args.input_size, args.output_size, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     TCN_upc = load_model(TCN, name, args)
     TCN_upc_eval = EvaluateMultiStep(TCN_upc, test_loader, name)
     TCN_upc_eval.run()
     TCN_upc_eval.plot()
     TCN_upc_eval.save()
     TCN_upc_eval.plot_hist()
-    print("TCN_upc results: ", TCN_upc_eval.results)
+    print("{} results: ".format(name), TCN_upc_eval.results)
 
     # TCN_category
     name = "TCN_category"
@@ -251,16 +251,15 @@ if __name__ == "__main__":
         'epochs': 300
     }
     args = AttrDict(args)
-    category_test_set = CategoryTest('data/UnileverShipmentPOS.csv', args.input_size, args.output_size, features,
-                                     targets)
-    test_loader = torch.utils.data.DataLoader(category_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CategoryTest(path_to_data, args.input_size, args.output_size, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     TCN_category = load_model(TCN, name, args)
     TCN_category_eval = EvaluateMultiStep(TCN_category, test_loader, name)
     TCN_category_eval.run()
     TCN_category_eval.plot()
     TCN_category_eval.save()
     TCN_category_eval.plot_hist()
-    print("TCN_category results: ", TCN_category_eval.results)
+    print("{} results: ".format(name), TCN_category_eval.results)
 
     # MultiLSTNet_upc
     name = "MultiLSTNet_upc"
@@ -284,16 +283,15 @@ if __name__ == "__main__":
         'epochs': 200
     }
     args = AttrDict(args)
-    case_test_set = CaseUpcTest('data/UnileverShipmentPOS.csv', args.input_size, args.output_size, features,
-                                targets)
-    test_loader = torch.utils.data.DataLoader(case_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CaseUpcTest(path_to_data, args.input_size, args.output_size, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     MultiLSTNet_upc = load_model(MultiLSTNet, name, args)
     MultiLSTNet_upc_eval = EvaluateMultiStep(MultiLSTNet_upc, test_loader, name)
     MultiLSTNet_upc_eval.run()
     MultiLSTNet_upc_eval.plot()
     MultiLSTNet_upc_eval.save()
     MultiLSTNet_upc_eval.plot_hist()
-    print("MultiLSTNet_upc results: ", MultiLSTNet_upc_eval.results)
+    print("{} results: ".format(name), MultiLSTNet_upc_eval.results)
 
     # MultiLSTNet_category
     name = "MultiLSTNet_category"
@@ -314,13 +312,12 @@ if __name__ == "__main__":
         'epochs': 500
     }
     args = AttrDict(args)
-    category_test_set = CategoryTest('data/UnileverShipmentPOS.csv', args.input_size, args.output_size, features,
-                                     targets)
-    test_loader = torch.utils.data.DataLoader(category_test_set, batch_size=1, shuffle=True, num_workers=0)
+    test_set = CategoryTest(path_to_data, args.input_size, args.output_size, features, targets)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
     MultiLSTNet_category = load_model(MultiLSTNet, name, args)
     MultiLSTNet_category_eval = EvaluateMultiStep(MultiLSTNet_category, test_loader, name)
     MultiLSTNet_category_eval.run()
     MultiLSTNet_category_eval.plot()
     MultiLSTNet_category_eval.save()
     MultiLSTNet_category_eval.plot_hist()
-    print("MultiLSTNet_category results: ", MultiLSTNet_category_eval.results)
+    print("{} results: ".format(name), MultiLSTNet_category_eval.results)

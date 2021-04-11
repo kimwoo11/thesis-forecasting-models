@@ -1,10 +1,11 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
+import numpy as np
 
 from attrdict import AttrDict
 from config import *
-from data_loader import CaseUpc, Category
+from datasets import CaseUpc, Category, CaseUpcTV, CategoryTV
 from train_utils import train, load_data
 
 
@@ -115,7 +116,7 @@ def run(path_to_data):
 
     args = AttrDict(args)
     name = "LSTNet_upc"
-    train_loader, val_loader = load_data(CaseUpc, path_to_data, args.input_size, args.output_size, features, targets,
+    train_loader, val_loader = load_data(CaseUpcTV, path_to_data, args.input_size, args.output_size, features, targets,
                                          args.bs)
     model = LSTNet(args)
     train(args, model, train_loader, val_loader, name)
@@ -142,10 +143,80 @@ def run(path_to_data):
     args = AttrDict(args)
     name = "LSTNet_category"
 
-    train_loader, val_loader = load_data(Category, path_to_data, args.input_size, args.output_size, features,
+    train_loader, val_loader = load_data(CategoryTV, path_to_data, args.input_size, args.output_size, features,
                                          targets, args.bs)
     model = LSTNet(args)
     train(args, model, train_loader, val_loader, name)
+
+
+def run_single(path_to_data):
+    features = FEATURES
+    targets = FEATURES
+
+    # CaseUpc
+    args = {
+        'input_size': 50,
+        'output_size': 1,
+        'num_features': len(features),
+        'rnn_hid_size': 200,
+        'cnn_hid_size': 200,
+        'skip_hid_size': 4,
+        'kernel_size': 4,
+        'skip': 4,
+        'highway_size': 4,
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'lr': 0.0001,  # for training
+        'wd': 0.0005,  # for training
+        'epochs': 200,  # for training
+        'bs': 16,
+    }
+
+    args = AttrDict(args)
+    dataset = CaseUpc(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_cases = np.load("data/top_cases.npy")
+    for case in top_cases:
+        data = dataset.upc_to_ts[case]
+
+        train_loader, val_loader = load_data(data, path_to_data, args.input_size, args.output_size, features,
+                                             targets, args.bs, single=True)
+        model = LSTNet(args)
+        name = "LSTNet_upc_{}".format(case)
+        train(args, model, train_loader, val_loader, name)
+
+    # Category
+    args = {
+        'input_size': 50,
+        'output_size': 1,
+        'num_features': len(features),
+        'rnn_hid_size': 200,
+        'cnn_hid_size': 200,
+        'skip_hid_size': 4,
+        'kernel_size': 4,
+        'skip': 4,
+        'highway_size': 4,
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'lr': 0.0001,
+        'wd': 0.0005,
+        'bs': 16,
+        'epochs': 200
+    }
+
+    args = AttrDict(args)
+    dataset = Category(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_categories = np.load("data/top_categories.npy")
+
+    for cat in top_categories:
+        data = dataset.category_to_ts[cat]
+
+        train_loader, val_loader = load_data(data, path_to_data, args.input_size, args.output_size, features,
+                                             targets, args.bs, single=True)
+        model = LSTNet(args)
+        name = "LSTNet_category_{}".format(cat)
+        train(args, model, train_loader, val_loader, name)
 
 
 if __name__ == "__main__":

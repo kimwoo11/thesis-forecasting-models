@@ -18,8 +18,11 @@ class RMSELoss(nn.Module):
         return loss
 
 
-def load_data(data_class, path_to_data, input_size, output_size, features, targets, bs):
-    dataset = data_class(path_to_data, input_size, output_size, features, targets)
+def load_data(data_class, path_to_data, input_size, output_size, features, targets, bs, single=False):
+    if single:
+        dataset = data_class
+    else:
+        dataset = data_class(path_to_data, input_size, output_size, features, targets)
 
     train_len = int(len(dataset) * 0.9)
     val_len = len(dataset) - train_len

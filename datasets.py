@@ -26,7 +26,7 @@ class CaseUpc(Dataset):
 
         for case in self.cases:
             ds = df[df.CASE_UPC_CD == case][features].dropna()
-            if ds.shape[0] < 200:
+            if ds.shape[0] < 100:
                 continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
             self.upc_to_ts[case].X = X
@@ -147,6 +147,7 @@ class CaseUpcTest(Dataset):
             self.upc_to_ts[case].y = y
             self.upc_to_ts[case].agg = agg
             self.upc_to_ts[case].scaler = scaler
+            self.upc_to_ts[case].ds = ds
 
             if self.X is None:
                 self.X = X
@@ -192,7 +193,7 @@ class Category(Dataset):
 
         for cat in self.categories:
             ds = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
-            if ds.shape[0] < 200:
+            if ds.shape[0] < 100:
                 continue
             X, y, agg, scaler = series_preparation(ds, targets, n_in, n_out)
             self.category_to_ts[cat].X = X

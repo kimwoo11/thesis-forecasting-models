@@ -5,7 +5,7 @@ import numpy as np
 
 from attrdict import AttrDict
 from config import *
-from datasets import CaseUpc, Category, CaseUpcTV, CategoryTV
+from datasets import CaseUpcTV, CategoryTV
 from train_utils import train, load_data
 
 
@@ -163,7 +163,7 @@ def run_single(path_to_data):
     }
 
     args = AttrDict(args)
-    dataset = CaseUpc(path_to_data, args.input_size, args.output_size, features, targets)
+    dataset = CaseUpcTV(path_to_data, args.input_size, args.output_size, features, targets)
 
     top_cases = np.load("data/top_cases.npy")
     for case in top_cases:
@@ -188,7 +188,7 @@ def run_single(path_to_data):
     }
 
     args = AttrDict(args)
-    dataset = Category(path_to_data, args.input_size, args.output_size, features, targets)
+    dataset = CategoryTV(path_to_data, args.input_size, args.output_size, features, targets)
 
     top_categories = np.load("data/top_categories.npy")
 

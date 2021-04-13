@@ -2,6 +2,7 @@ import torch
 import torch.utils.data
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from sklearn.metrics import r2_score
 from TCN import *
@@ -129,6 +130,33 @@ class EvaluateMultiStep(object):
         ax.grid(True)
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
         fig.savefig("{}_{}_step.png".format(self.name, self.best_y.size(0)))
+        plt.close(fig)
+
+    def plot_full(self, data):
+        """Plot full time series
+        """
+        df = data.ds
+        scaler = data.scaler
+        values = df.values
+        # normalize features
+        scaled = scaler.fit_transform(values)
+        # created normalized dataframe
+        scaled_df = pd.DataFrame(scaled)
+        scaled_df.index = df.index
+        scaled_df.columns = df.columns
+        df = scaled_df['ShipmentCases'][-150:]
+
+        fig, ax = plt.subplots(figsize=(15, 9))
+        t = df.index
+        ax.plot(t[-12:], self.best_y[:, 0], color='blue', label="Target")
+        ax.plot(t[-12:], self.best_pred[:, 0], color='red', label="Prediction")
+        ax.plot(t[:-11], df.iloc[:-11], 'k')
+        ax.legend()
+        ax.set_title("ShipmentCases Forecast vs Target for {}".format(self.name))
+        ax.grid(True)
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.savefig("{}_{}_step.png".format(self.name, self.best_y.size(0)))
+        plt.close(fig)
 
     def plot_hist(self):
         fig, ax = plt.subplots(figsize=(15, 9))
@@ -140,7 +168,7 @@ class EvaluateMultiStep(object):
 
     def save(self):
         row = list(self.results.values())
-        np.savetxt("results/{}_evaluation_results.csv".format(name), row, delimiter=',')
+        np.savetxt("results/{}_evaluation_results.csv".format(self.name), row, delimiter=',')
 
 
 def load_model(model_object, name, args):
@@ -151,8 +179,7 @@ def load_model(model_object, name, args):
     return model
 
 
-if __name__ == "__main__":
-    path_to_data = 'data/UnileverShipmentPOS.csv'
+def evaluate(path_to_data):
     # LSTNet_upc
     name = "LSTNet_upc"
     features = FEATURES
@@ -321,3 +348,197 @@ if __name__ == "__main__":
     MultiLSTNet_category_eval.save()
     MultiLSTNet_category_eval.plot_hist()
     print("{} results: ".format(name), MultiLSTNet_category_eval.results)
+
+
+def evaluate_singles(path_to_data):
+    # LSTNet_upc_single
+    features = FEATURES
+    targets = FEATURES
+
+    args = {
+        'input_size': 50,
+        'output_size': 1,
+        'num_features': len(features),
+        'rnn_hid_size': 200,
+        'cnn_hid_size': 200,
+        'skip_hid_size': 4,
+        'kernel_size': 4,
+        'skip': 4,
+        'highway_size': 4,
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'bs': 1000,
+    }
+    args = AttrDict(args)
+    dataset = CaseUpcTest(path_to_data, args.input_size, 12, features, targets)
+
+    top_cases = np.load("data/top_cases.npy")
+    for case in top_cases:
+        test_set = dataset.upc_to_ts[case]
+        name = "LSTNet_upc_{}".format(case)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        LSTNet_upc = load_model(LSTNet, name, args)
+        LSTNet_upc_eval = EvaluateMultiStep(LSTNet_upc, test_loader, name)
+        LSTNet_upc_eval.run_rolling()
+        LSTNet_upc_eval.plot_full(test_set)
+        LSTNet_upc_eval.save()
+        print("{} results: ".format(name), LSTNet_upc_eval.results)
+
+    # LSTnet_category_single
+    args = {
+        'input_size': 50,
+        'output_size': 1,
+        'num_features': len(features),
+        'rnn_hid_size': 200,
+        'cnn_hid_size': 200,
+        'skip_hid_size': 4,
+        'kernel_size': 4,
+        'skip': 4,
+        'highway_size': 4,
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'bs': 100,
+    }
+
+    args = AttrDict(args)
+    dataset = CategoryTest(path_to_data, args.input_size, 12, features, targets)
+
+    top_categories = np.load("data/top_categories.npy")
+    for cat in top_categories:
+        test_set = dataset.category_to_ts[cat]
+        name = "LSTNet_category_{}".format(cat)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        LSTNet_category = load_model(LSTNet, name, args)
+        LSTNet_category_eval = EvaluateMultiStep(LSTNet_category, test_loader, name)
+        LSTNet_category_eval.run_rolling()
+        LSTNet_category_eval.plot_full(test_set)
+        LSTNet_category_eval.save()
+        print("{} results: ".format(name), LSTNet_category_eval.results)
+
+    # MultiLSTNet_upc
+    features = FEATURES
+    targets = FEATURES
+
+    args = {
+        'input_size': 50,
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'rnn_hid_size': 100,
+        'cnn_hid_size': 100,
+        'kernel_size': 4,
+        'highway_size': 0,  # set to zero for single target
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'lr': 0.0001,
+        'wd': 0.0005,
+        'bs': 1000,
+        'epochs': 200
+    }
+    args = AttrDict(args)
+    dataset = CaseUpcTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_cases = np.load("data/top_cases.npy")
+    for case in top_cases:
+        test_set = dataset.upc_to_ts[case]
+        name = "MultiLSTNet_upc_{}".format(case)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        MultiLSTNet_upc = load_model(MultiLSTNet, name, args)
+        MultiLSTNet_upc_eval = EvaluateMultiStep(MultiLSTNet_upc, test_loader, name)
+        MultiLSTNet_upc_eval.run()
+        MultiLSTNet_upc_eval.plot_full(test_set)
+        MultiLSTNet_upc_eval.save()
+        print("{} results: ".format(name), MultiLSTNet_upc_eval.results)
+
+    # MultiLSTNet_category
+    args = {
+        'input_size': 20,
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'rnn_hid_size': 100,
+        'cnn_hid_size': 100,
+        'kernel_size': 4,
+        'highway_size': 0,  # set to zero for single target
+        'dropout': 0.1,
+        'output_fun': 'sigmoid',
+        'lr': 0.001,
+        'wd': 0.0005,
+        'bs': 16,
+        'epochs': 500
+    }
+    args = AttrDict(args)
+    dataset = CategoryTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_categories = np.load("data/top_categories.npy")
+    for cat in top_categories:
+        test_set = dataset.category_to_ts[cat]
+        name = "MultiLSTNet_category_{}".format(cat)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        MultiLSTNet_category = load_model(MultiLSTNet, name, args)
+        MultiLSTNet_category_eval = EvaluateMultiStep(MultiLSTNet_category, test_loader, name)
+        MultiLSTNet_category_eval.run()
+        MultiLSTNet_category_eval.plot_full(test_set)
+        MultiLSTNet_category_eval.save()
+        print("{} results: ".format(name), MultiLSTNet_category_eval.results)
+
+    # TCN_upc
+    features = FEATURES
+    targets = TARGETS
+    args = {
+        'input_size': 20,
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'lr': 0.001,
+        'wd': 0.0005,
+        'bs': 1000,
+        'epochs': 200
+    }
+    args = AttrDict(args)
+    dataset = CaseUpcTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_cases = np.load("data/top_cases.npy")
+    for case in top_cases:
+        test_set = dataset.upc_to_ts[case]
+        name = "TCN_upc_{}".format(case)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        TCN_upc = load_model(TCN, name, args)
+        TCN_upc_eval = EvaluateMultiStep(TCN_upc, test_loader, name)
+        TCN_upc_eval.run()
+        TCN_upc_eval.plot_full(test_set)
+        TCN_upc_eval.save()
+        print("{} results: ".format(name), TCN_upc_eval.results)
+
+    # TCN_category
+    features = FEATURES
+    targets = TARGETS
+    args = {
+        'input_size': 20,
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'lr': 0.0001,
+        'wd': 0.0005,
+        'bs': 16,
+        'epochs': 300
+    }
+    args = AttrDict(args)
+    dataset = CategoryTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_categories = np.load("data/top_categories.npy")
+    for cat in top_categories:
+        test_set = dataset.category_to_ts[cat]
+        name = "TCN_category_{}".format(cat)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        TCN_category = load_model(TCN, name, args)
+        TCN_category_eval = EvaluateMultiStep(TCN_category, test_loader, name)
+        TCN_category_eval.run()
+        TCN_category_eval.plot_full(test_set)
+        TCN_category_eval.save()
+        print("{} results: ".format(name), TCN_category_eval.results)
+
+
+if __name__ == "__main__":
+    path_to_data = 'data/UnileverShipmentPOS.csv'
+    evaluate_singles(path_to_data)

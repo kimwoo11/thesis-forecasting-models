@@ -63,10 +63,11 @@ class EvaluateTransformer(object):
         losses = np.array(losses)
         accuracies = np.array(accuracies)
         biases = np.array(biases)
-        self.results['avg_loss'] = np.mean(losses)
+        self.results['median_loss'] = np.median(losses)
         self.results['median_acc'] = np.median(accuracies)
-        self.results['mean_acc'] = np.mean(accuracies)
         self.results['median_bias'] = np.median(biases)
+        self.results['avg_loss'] = np.mean(losses)
+        self.results['mean_acc'] = np.mean(accuracies)
         self.results['mean_bias'] = np.mean(biases)
         self.results['best_loss'] = np.min(losses)
         self.results['best_acc'] = np.max(accuracies)
@@ -111,7 +112,10 @@ class EvaluateTransformer(object):
         t = df.index
         ax.plot(t[-12:], self.best_y[:, 0], color='blue', label="Target")
         ax.plot(t[-12:], self.best_pred[:, 0], color='red', label="Prediction")
-        ax.plot(t[:-11], df.iloc[:-11], 'k')
+        ax.plot(t[:-12], df.iloc[:-12], 'k')
+        ax.plot([t[-13], t[-12]], [df.iloc[-13], self.best_y[0, 0]], color='blue')  # connect to previous sequence
+        ax.plot([t[-13], t[-12]], [df.iloc[-13], self.best_pred[0, 0]], color='red')
+
         ax.legend()
         ax.set_title("ShipmentCases Forecast vs Target for {}".format(self.name))
         ax.grid(True)
@@ -250,6 +254,67 @@ def evaluate_singles(path_to_data):
         print("{} results: ".format(name), Transformer_upc_eval.results)
 
 
+def evaluate_full_on_singles(path_to_data):
+    # Transformer_upc_single
+    features = FEATURES
+    targets = TARGETS
+
+    args = {
+        'input_size': 20,  # decreasing didn't help
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'lr': 0.00001,
+        'wd': 0.0005,
+        'bs': 16,
+        'epochs': 200
+    }
+
+    args = AttrDict(args)
+    dataset = CaseUpcTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_cases = np.load("data/top_cases.npy")
+    for case in top_cases:
+        test_set = dataset.upc_to_ts[case]
+        name = "Transformer_upc_on_{}".format(case)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        Transformer_upc = load_model(Transformer, "Transformer_upc", args)
+        Transformer_upc_eval = EvaluateTransformer(Transformer_upc, test_loader, name)
+        Transformer_upc_eval.run()
+        Transformer_upc_eval.plot_full(test_set)
+        Transformer_upc_eval.save()
+        print("{} results: ".format(name), Transformer_upc_eval.results)
+
+    # Transformer_category_single
+    args = {
+        'input_size': 20,
+        'output_size': 12,
+        'num_features': len(features),
+        'num_targets': len(targets),
+        'lr': 0.00001,
+        'wd': 0.0005,
+        'bs': 16,
+        'epochs': 500
+    }
+
+    args = AttrDict(args)
+    dataset = CategoryTest(path_to_data, args.input_size, args.output_size, features, targets)
+
+    top_cases = np.load("data/top_categories.npy")
+    for case in top_cases:
+        test_set = dataset.category_to_ts[case]
+        name = "Transformer_category_on_{}".format(case)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=0)
+        Transformer_upc = load_model(Transformer, "Transformer_category", args)
+        Transformer_upc_eval = EvaluateTransformer(Transformer_upc, test_loader, name)
+        Transformer_upc_eval.run()
+        Transformer_upc_eval.plot_full(test_set)
+        Transformer_upc_eval.save()
+        print("{} results: ".format(name), Transformer_upc_eval.results)
+
+
 if __name__ == "__main__":
     path_to_data = "data/UnileverShipmentPOS.csv"
+    evaluate(path_to_data)
     evaluate_singles(path_to_data)
+    evaluate_full_on_singles(path_to_data)

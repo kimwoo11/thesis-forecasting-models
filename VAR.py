@@ -58,6 +58,10 @@ def calc_accuracy(pred, df_test):
     return np.mean(1 - diff)
 
 
+def calc_bias(pred, df_test):
+    return np.mean(abs(df_test - pred) / pred)
+
+
 def evaluate(ts, n_in, n_out):
     df_train = ts[:-n_out]
     df_test = ts[-n_out:]
@@ -83,7 +87,9 @@ def evaluate(ts, n_in, n_out):
     if num_diff > 0:
         df_pred = invert_transformation(df_train, df_pred)
 
-    return calc_accuracy(df_pred['ShipmentCases'], df_test['ShipmentCases']), df_pred
+    return calc_accuracy(df_pred['ShipmentCases'], df_test['ShipmentCases']), \
+           calc_bias(df_pred['ShipmentCases'], df_test['ShipmentCases']), \
+           calc_rmse(df_pred['ShipmentCases'], df_test['ShipmentCases']), df_pred
 
 
 def normalize_df(df):
@@ -108,39 +114,19 @@ if __name__ == "__main__":
     cases = df.CASE_UPC_CD.unique()
 
     accs = []
-    best_case = None
-    best_acc = 0
-    best_pred = None
+    biases = []
+    rmses = []
+
+
     for case in cases:
         ts = df[df.CASE_UPC_CD == case][features].dropna()
         if ts.shape[0] > 200:
             ts = normalize_df(ts)
-            acc, df_pred = evaluate(ts, n_in, n_out)
+            acc, bias, rmse, df_pred = evaluate(ts, n_in, n_out)
             if acc is not None:
                 accs.append(acc)
-                if acc >= best_acc:
-                    best_acc = acc
-                    best_case = case
-                    best_pred = df_pred
-    print("Best Accuracy: ", best_acc)
-
-    best_ts = df[df.CASE_UPC_CD == best_case][features].dropna()
-    best_ts = normalize_df(best_ts)
-
-    fig, ax = plt.subplots(figsize=(15, 9))
-    col = "ShipmentCases"
-    best_pred[col].plot(legend=True, label="Predictions").autoscale(axis='x', tight=True)
-    best_ts[col][-n_out:].plot(legend=True, ax=ax, label="Targets")
-    ax.set_title(col + ": Forecast vs Actuals")
-    ax.xaxis.set_ticks_position('none')
-    ax.yaxis.set_ticks_position('none')
-    ax.spines["top"].set_alpha(0)
-    ax.tick_params(labelsize=6)
-    ax.grid(True)
-
-    plt.suptitle("Highest Accuracy Prediction for Case UPC {}".format(best_case), fontsize=16)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
-    plt.savefig("figures/VAR_cases_12_step.png")
+                biases.append(bias)
+                rmses.append(rmse)
 
     # plot accuracy histogram
     fig, ax = plt.subplots(figsize=(15, 9))
@@ -150,44 +136,29 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("figures/VAR_upc_accuracy_histogram.png")
 
-    print("Median accuracy across all UPCs: ", np.median(accs))
-    print("Mean accuracy across all UPCs: ", np.mean(accs))
+    print("VAR_upc")
+    res = [np.median(rmses), np.median(accs), np.median(biases)]
+    print(np.median(rmses))
+    print(np.median(accs))
+    print(np.median(biases))
+    np.savetxt("results/{}_upc_evaluation_results.csv".format("VAR"), res, delimiter=',')
+
+
 
     categories = df.CategoryDesc.unique()
 
     accs = []
-    best_case = None
-    best_acc = 0
-    best_pred = None
+    biases = []
+    rmses = []
+
     for cat in categories:
         ts = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
         if ts.shape[0] > 200:
             ts = normalize_df(ts)
-            acc, df_pred = evaluate(ts, n_in, n_out)
+            acc, bias, rmse, df_pred = evaluate(ts, n_in, n_out)
             accs.append(acc)
-            if acc > best_acc:
-                best_acc = acc
-                best_case = cat
-                best_pred = df_pred
-
-    print("Best Accuracy: ", best_acc)
-    best_ts = df[df.CategoryDesc == best_case][features].dropna().groupby('WeekNumber').sum()
-    best_ts = normalize_df(best_ts)
-
-    fig, ax = plt.subplots(figsize=(15, 9))
-    col = "ShipmentCases"
-    best_pred[col].plot(legend=True, label="Predictions").autoscale(axis='x', tight=True)
-    best_ts[col][-n_out:].plot(legend=True, label="Targets")
-    ax.set_title(col + ": Forecast vs Actuals")
-    ax.xaxis.set_ticks_position('none')
-    ax.yaxis.set_ticks_position('none')
-    ax.spines["top"].set_alpha(0)
-    ax.tick_params(labelsize=6)
-    ax.grid(True)
-
-    plt.suptitle("Highest Accuracy Prediction For Category {}".format(best_case), fontsize=16)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # [left, bottom, right, top]
-    plt.savefig("figures/VAR_categories_12_step.png")
+            biases.append(bias)
+            rmses.append(rmse)
 
     # plot accuracy histogram
     fig, ax = plt.subplots(figsize=(15, 9))
@@ -197,14 +168,69 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("figures/VAR_category_accuracy_histogram.png")
 
-    print("Median accuracy across all categories: ", np.median(accs))
-    print("Mean accuracy across all categories: ", np.mean(accs))
+    print("VAR_category")
+    res = [np.median(rmses), np.median(accs), np.median(biases)]
+    print(np.median(rmses))
+    print(np.median(accs))
+    print(np.median(biases))
+    np.savetxt("results/{}_category_evaluation_results.csv".format("VAR"), res, delimiter=',')
 
-"""    
-Best Accuracy:  0.900303317923492
-Median accuracy across all UPCs:  0.03443253810424375
-Mean accuracy across all UPCs:  -0.914792513710377
-Best Accuracy:  0.6750380114543121
-Median accuracy across all categories:  0.020290658609166245
-Mean accuracy across all categories:  0.16340286057845702
-"""
+
+    top_cases = np.load("data/top_cases.npy")
+    top_categories = np.load("data/top_categories.npy")
+
+    for case in top_cases:
+        name = "VAR_upc_{}".format(case)
+        ts = df[df.CASE_UPC_CD == case][features].dropna()
+        ts = normalize_df(ts)
+        acc, bias, rmse, df_pred = evaluate(ts, n_in, n_out)
+        if acc is None:
+            print("ABORT!!")
+        res = [rmse, acc, bias]
+        np.savetxt("results/{}_upc_{}_evaluation_results.csv".format("VAR", case), res, delimiter=',')
+
+        fig, ax = plt.subplots(figsize=(15, 9))
+        col = "ShipmentCases"
+
+        t = ts.index
+        ax.plot(t[-n_out:], ts[col].iloc[-n_out:], color='blue', label="Target")
+        ax.plot(t[-n_out:], df_pred[col], color='red', label="Prediction")
+        ax.plot(t[:-n_out], ts[col].iloc[:-n_out], 'k')
+        ax.plot([t[-13], t[-12]], [ts[col].iloc[-13], ts[col][-12]], color='blue')  # connect to previous sequence
+        ax.plot([t[-13], t[-12]], [ts[col].iloc[-13], df_pred[col][0]], color='red')
+        ax.legend()
+
+        ax.grid(True)
+        ax.set_title("ShipmentCases Forecast vs Target for {}".format(name))
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.savefig("{}_{}_step.png".format(name, 12))
+        plt.close(fig)
+
+    top_categories = np.load("data/top_categories.npy")
+
+    for cat in top_categories:
+        name = "VAR_category_{}".format(cat)
+        ts = df[df.CategoryDesc == cat][features].dropna().groupby('WeekNumber').sum()
+        ts = normalize_df(ts)
+        acc, bias, rmse, df_pred = evaluate(ts, n_in, n_out)
+        if acc is None:
+            print("ABORT!!")
+        res = [rmse, acc, bias]
+        np.savetxt("results/{}_category_{}_evaluation_results.csv".format("VAR", cat), res, delimiter=',')
+
+        fig, ax = plt.subplots(figsize=(15, 9))
+        col = "ShipmentCases"
+
+        t = ts.index
+        ax.plot(t[-n_out:], ts[col][-n_out:], color='blue', label="Target")
+        ax.plot(t[-n_out:], df_pred[col], color='red', label="Prediction")
+        ax.plot(t[:-n_out], ts[col].iloc[:-n_out], 'k')
+        ax.plot([t[-13], t[-12]], [ts[col].iloc[-13], ts[col].iloc[-12]], color='blue')  # connect to previous sequence
+        ax.plot([t[-13], t[-12]], [ts[col].iloc[-13], df_pred[col][0]], color='red')
+        ax.legend()
+
+        ax.grid(True)
+        ax.set_title("ShipmentCases Forecast vs Target for {}".format(name))
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.savefig("{}_{}_step.png".format(name, 12))
+        plt.close(fig)

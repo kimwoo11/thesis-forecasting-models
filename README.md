@@ -2,7 +2,7 @@
 
 This repository contains the code base for my undergraduate thesis on exploring multivariate,
 multi-step forecasting models in an effort to predict supply chain demands using Unilever's shipment
-data. 
+data. The final report can be found [here](Thesis_Final_Report.pdf).
 
 ## Explored Models
 
